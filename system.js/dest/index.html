@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>system.js demo</title>
+  </head>
+
+  <body>
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "react": "https://cdn.bootcdn.net/ajax/libs/react/17.0.2/umd/react.production.min.js",
+          "react-dom": "https://cdn.bootcdn.net/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"
+        }
+      }
+    </script>
+    <div id="root"></div>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/systemjs/6.10.1/system.min.js"></script> -->
+    <script>
+      // 这里可以动态加载模块， 可以加载远程链接
+      // ADM 依赖前置 引入index.js得时候  需要先加载 react和 react-dom
+      function SystemJS() {}
+      let set = new Set();
+      const saveGlobalPro = () => {
+        for (let p in window) {
+          set.add(p);
+        }
+      };
+      const getGlobalLastPro = () => {
+        let result;
+        for (let p in window) {
+          if (set.has(p)) continue;
+          result = window[p];
+          result.default = result;
+        }
+        return result;
+      };
+
+      saveGlobalPro();
+
+      function load(id) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = id;
+          script.async = true;
+          document.head.appendChild(script);
+          script.addEventListener("load", function () {
+            // 加载后会拿到 依赖 和 回调
+            let _lastRegister = lastRegister;
+            lastRegister = undefined;
+
+            if (!_lastRegister) {
+              resolve([[], function () {}]); // 表示没有其他依赖了
+            }
+            resolve(_lastRegister);
+          });
+        });
+      }
+      SystemJS.prototype.import = function (id) {
+        return new Promise((resolve, reject) => {
+          const lastSepIndex = window.location.href.lastIndexOf("/");
+          const baseURL = location.href.slice(0, lastSepIndex + 1);
+          if (id.startsWith("./")) {
+            resolve(baseURL + id.slice(2));
+          }
+        }).then((id) => {
+          // 怎么加载js文件呢？ script / fetch + eval
+          let exec;
+          // 可以实现system模块递归加载
+          return load(id)
+            .then((registerition) => {
+              let declared = registerition[1](() => {});
+              // 加载 react 和 react-dom  加载完毕后调用setters
+              // 调用执行函数
+              exec = declared.execute;
+              return [registerition[0], declared.setters];
+              // {setters:[],execute:function(){}}
+            })
+            .then((info) => {
+              return Promise.all(
+                info[0].map((dep, i) => {
+                  var setter = info[1][i];
+                  // react 和 react-dom 会给全局增添属性 window.React,window.ReactDOM
+                  return load(dep).then((r) => {
+                    // console.log(r);
+                    let p = getGlobalLastPro();
+                    // 这里如何获取 react和react-dom?
+                    setter(p); // 传入加载后的文件
+                  });
+                })
+              );
+            })
+            .then(() => {
+              exec();
+            });
+        });
+      };
+      let lastRegister;
+      SystemJS.prototype.register = function (deps, declare) {
+        // 将本次注册的依赖和声明 暴露到外部
+        lastRegister = [deps, declare];
+      };
+      let System = new SystemJS();
+      System.import("./index.js").then(() => {});
+    </script>
+  </body>
+</html>

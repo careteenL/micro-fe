@@ -105,12 +105,269 @@
 
 ## single spa
 
-先介绍下`SystemJS`
+查看`single-spa`配置文件[rollup.config.js](https://github.com/single-spa/single-spa/blob/master/rollup.config.js#L44)可得知，使用了`rollup`做打包工具，并采用的`system`模块规范做输出。
 
-### SystemJS
+> 感兴趣可查看对[@careteen/rollup](https://github.com/careteenL/rollup)的简易实现。
 
-`SystemJS` 是一个通用的模块加载器，它能在浏览器上动态加载模块。微前端的核心就是
-加载微应用，我们将应用打包成模块，在浏览器中通过 `SystemJS` 来加载模块。
+那我们就很有必要先介绍下`SystemJS`的相关知识。
+
+### SystemJS使用
+
+`SystemJS` 是一个通用的模块加载器，它能在浏览器上动态加载模块。微前端的核心就是加载微应用，我们将应用打包成模块，在浏览器中通过 `SystemJS` 来加载模块。
+
+#### 新建项目并配置
+
+安装依赖
+
+```shell
+$ mkdir system.js
+$ yarn init
+$ yarn add webpack webpack-cli webpack-dev-server babel-loader @babel/core @babel/preset-env @babel/preset-react html-webpack-plugin -D
+$ yarn add react react-dom
+```
+
+配置`webpack.config.js`文件，采用`system.js`模块规范作为`output.libraryTarget`，并不打包`react/react-dom`。
+
+```js
+const path = require("path");
+const HtmlWebpackPlugin = require("html-webpack-plugin");
+module.exports = (env) => {
+  return {
+    mode: "development",
+    output: {
+      filename: "index.js",
+      path: path.resolve(__dirname, "dest"),
+      libraryTarget: env.production ? "system" : "",
+    },
+    module: {
+      rules: [
+        {
+          test: /\.js$/,
+          use: { loader: "babel-loader" },
+          exclude: /node_modules/,
+        },
+      ],
+    },
+    plugins: [
+      !env.production &&
+        new HtmlWebpackPlugin({
+          template: "./public/index.html",
+        }),
+    ].filter(Boolean),
+    externals: env.production ? ["react", "react-dom"] : [],
+  };
+};
+```
+
+配置`.babelrc`文件
+
+```json
+{
+  "presets":[
+    "@babel/preset-env",
+    "@babel/preset-react"
+  ]
+}
+```
+
+配置`package.json`文件
+
+```json
+"scripts": {
+  "dev": "webpack serve",
+  "build": "webpack --env production"
+},
+```
+
+#### 编写js、html代码
+
+新建`src/index.js`入口文件
+
+```js
+import React from 'react';
+import ReactDOM from 'react-dom';
+
+ReactDOM.render(
+  <h1>hello system.js</h1>,
+  document.getElementById('root')
+)
+```
+
+新建`public/index.html`文件，以cdn的形式引入`system.js`，并且将`react/react-dom`作为前置依赖配置到`systemjs-importmap`中。
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>system.js demo</title>
+  </head>
+
+  <body>
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "react": "https://cdn.bootcdn.net/ajax/libs/react/17.0.2/umd/react.production.min.js",
+          "react-dom": "https://cdn.bootcdn.net/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"
+        }
+      }
+    </script>
+    <div id="root"></div>
+    <script src="https://cdn.bootcdn.net/ajax/libs/systemjs/6.10.1/system.min.js"></script>
+    <script>
+      System.import("./index.js").then(() => {});
+    </script>
+  </body>
+</html>
+```
+
+然后命令行运行
+
+```shell
+$ npm run dev # or build
+```
+
+打开浏览器访问，可正常显示文本。
+
+#### 查看dest目录
+
+观察`dest/index.js`文件，可发现通过`system.js`打包后会根据`webpack`配置而先`register`预加载`react/react-dom`然后返回`execute`执行函数。
+
+```js
+System.register(["react","react-dom"], function(__WEBPACK_DYNAMIC_EXPORT__, __system_context__) {
+  return {
+    setters: [
+      // ...
+    ],
+    execute: function() {
+      // ...
+    }
+  };
+});
+```
+
+并且我们在使用时是通过`System.import("./index.js").then(() => {});`这个形式。
+
+基于上述观察，我们了解到`system.js`两个核心`api`
+
+- System.import ：加载入口文件
+- System.register ：预加载
+
+下面将做个简易实现。
+
+### SystemJS原理
+
+首先提供构造函数，并将`window`的属性存一份，目的是查找对`window`属性进行的修改。
+
+```js
+function SystemJS() {}
+let set = new Set();
+const saveGlobalPro = () => {
+  for (let p in window) {
+    set.add(p);
+  }
+};
+const getGlobalLastPro = () => {
+  let result;
+  for (let p in window) {
+    if (set.has(p)) continue;
+    result = window[p];
+    result.default = result;
+  }
+  return result;
+};
+
+saveGlobalPro();
+```
+
+实现`register`方法，主要是对前置依赖做存储，方便后面加载文件时取值加载。
+
+```js
+let lastRegister;
+SystemJS.prototype.register = function (deps, declare) {
+  // 将本次注册的依赖和声明 暴露到外部
+  lastRegister = [deps, declare];
+};
+```
+
+使用`JSONP`提供`load`创建`script`脚本函数。
+
+```js
+function load(id) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = id;
+    script.async = true;
+    document.head.appendChild(script);
+    script.addEventListener("load", function () {
+      // 加载后会拿到 依赖 和 回调
+      let _lastRegister = lastRegister;
+      lastRegister = undefined;
+
+      if (!_lastRegister) {
+        resolve([[], function () {}]); // 表示没有其他依赖了
+      }
+      resolve(_lastRegister);
+    });
+  });
+}
+```
+
+实现`import`方法，传参为`id`即入口文件，加载入口文件后，解析[查看dest目录](#查看dest目录)中的`setters和execute`。
+
+由于`react` 和 `react-dom` 会给全局增添属性 `window.React`,`window.ReactDOM`属性，所以可以通过`getGlobalLastPro`获取到这些新增的依赖库。
+
+```js
+SystemJS.prototype.import = function (id) {
+  return new Promise((resolve, reject) => {
+    const lastSepIndex = window.location.href.lastIndexOf("/");
+    const baseURL = location.href.slice(0, lastSepIndex + 1);
+    if (id.startsWith("./")) {
+      resolve(baseURL + id.slice(2));
+    }
+  }).then((id) => {
+    let exec;
+    // 可以实现system模块递归加载
+    return load(id)
+      .then((registerition) => {
+        let declared = registerition[1](() => {});
+        // 加载 react 和 react-dom  加载完毕后调用setters
+        // 调用执行函数
+        exec = declared.execute;
+        return [registerition[0], declared.setters];
+        // {setters:[],execute:function(){}}
+      })
+      .then((info) => {
+        return Promise.all(
+          info[0].map((dep, i) => {
+            var setter = info[1][i];
+            // react 和 react-dom 会给全局增添属性 window.React,window.ReactDOM
+            return load(dep).then((r) => {
+              // console.log(r);
+              let p = getGlobalLastPro();
+              // 这里如何获取 react和react-dom?
+              setter(p); // 传入加载后的文件
+            });
+          })
+        );
+      })
+      .then(() => {
+        exec();
+      });
+  });
+};
+```
+
+上述简单实现了`system.js`的核心方法，可注释掉cdn引入形式，使用自己实现的进行测试，可正常展示。
+
+```js
+let System = new SystemJS();
+System.import("./index.js").then(() => {});
+```
+
+### single spa使用
 
 ## qiankun
 
