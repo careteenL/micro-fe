@@ -373,6 +373,191 @@ System.import("./index.js").then(() => {});
 
 ### single spa使用
 
+安装脚手架，方便快速创建应用。
+```shell
+$ npm i -g create-single-spa
+```
+#### 创建基座
+
+```shell
+$ create-single-spa base
+```
+
+![create-single-spa-base](./assets/create-single-spa-base.png)
+
+在`src/careteen-root-config.js`文件中新增下面子应用配置
+
+```js
+registerApplication({
+  name: "@careteen/vue", // 应用名字
+  app: () => System.import("@careteen/vue"), // 加载的应用
+  activeWhen: ["/vue"], // 路径匹配
+  customProps: {
+    name: 'single-spa-base',
+  },
+});
+
+registerApplication({
+  name: "@careteen/react",
+  app: () => System.import("@careteen/react"),
+  activeWhen: ["/react"],
+  customProps: {
+    name: 'single-spa-base',
+  },
+});
+start({
+  urlRerouteOnly: true, // 全部使用SingleSpa中的reroute管理路由
+});
+```
+
+提供`registerApplication`方法注册并加载应用，`start`方法启动应用
+
+查看`src/index.ejs`文件
+
+```html
+<script type="systemjs-importmap">
+  {
+    "imports": {
+      "single-spa": "https://cdn.jsdelivr.net/npm/single-spa@5.9.0/lib/system/single-spa.min.js"
+    }
+  }
+</script>
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/single-spa@5.9.0/lib/system/single-spa.min.js" as="script">
+
+<script>
+  System.import('@careteen/root-config');
+</script>
+```
+
+可得知需要`single-spa`作为前置依赖，并且实现`preload`预加载，最后加载基座应用`System.import('@careteen/root-config');`。
+
+下面继续使用脚手架创建子应用
+
+#### 创建vue项目
+
+```shell
+$ create-single-spa slave-vue
+```
+
+![create-single-spa-vue](./assets/create-single-spa-vue.png)
+
+此处选择`vue3.x`版本。新建`vue.config.js`配置文件，配置开发端口号为`3000`
+
+```js
+module.exports = {
+  devServer: {
+    port: 3000,
+  },
+}
+```
+
+还需要修改`src/router/index.js`
+
+```js
+const router = createRouter({
+  history: createWebHistory('/vue'),
+  routes,
+});
+```
+
+在基座中配置
+
+```html
+<script type="systemjs-importmap">
+  {
+    "imports": {
+      "@careteen/root-config": "//localhost:9000/careteen-root-config.js",
+      "@careteen/slave-vue": "//localhost:3000/js/app.js"
+    }
+  }
+</script>
+```
+
+#### 创建react项目
+
+```shell
+$ create-single-spa slave-react
+```
+
+![create-single-spa-react](./assets/create-single-spa-react.png)
+
+修改开发端口号为`4000`
+
+```json
+"scripts": {
+  "start": "webpack serve --port 4000",
+}
+```
+
+创建下面路由
+
+```js
+import { BrowserRouter as Router, Route, Link, Switch, Redirect } from 'react-router-dom'
+import Home from './components/Home.js'
+import About from './components/About.js'
+
+export default function Root(props) {
+  return <Router basename="/react">
+    <div>
+      <Link to="/">Home React</Link>
+      <Link to="/about">About React</Link>
+    </div>
+    <Switch>
+      <Route path="/"  exact={true} component={Home}></Route>
+      <Route path="/about" component={About}></Route>
+      <Redirect to="/"></Redirect>
+    </Switch>
+  </Router>
+}
+```
+
+在基座中配置`react/react-dom`以及`@careteen/react`
+
+```html
+<script type="systemjs-importmap">
+  {
+    "imports": {
+      "single-spa": "https://cdn.jsdelivr.net/npm/single-spa@5.9.0/lib/system/single-spa.min.js",
+      "react":"https://cdn.bootcdn.net/ajax/libs/react/17.0.2/umd/react.production.min.js",
+      "react-dom":"https://cdn.bootcdn.net/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"        
+    }
+  }
+</script>
+<script type="systemjs-importmap">
+  {
+    "imports": {
+      "@careteen/root-config": "//localhost:9000/careteen-root-config.js",
+      "@careteen/slave-vue": "//localhost:3000/js/app.js",
+      "@careteen/react": "//localhost:4000/careteen-react.js"
+    }
+  }
+</script>
+```
+
+#### 启动项目
+
+```shell
+$ cd base && yarn start
+$ cd ../slave-vue && yarn start
+$ cd ../slave-react && yarn start
+```
+
+浏览器打开 http://localhost:9000/
+
+![single-spa-base](./assets/single-spa-base.png)
+
+手动输入 http://localhost:9000/vue/
+
+![single-spa-vue](./assets/single-spa-vue.png)
+
+手动输入 http://localhost:9000/react/
+
+![single-spa-react](./assets/single-spa-react.png)
+
+### single spa原理
+
+
+
 ## qiankun
 
 
