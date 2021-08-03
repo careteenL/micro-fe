@@ -373,6 +373,8 @@ System.import("./index.js").then(() => {});
 
 ### single spa使用
 
+> 下方示例代码存放在[@careteen/micro-fe/single-spa](https://github.com/careteenL/micro-fe/tree/master/single-spa)，感兴趣可以前往调试。
+
 安装脚手架，方便快速创建应用。
 ```shell
 $ npm i -g create-single-spa
