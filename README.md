@@ -115,6 +115,8 @@
 
 `SystemJS` 是一个通用的模块加载器，它能在浏览器上动态加载模块。微前端的核心就是加载微应用，我们将应用打包成模块，在浏览器中通过 `SystemJS` 来加载模块。
 
+> 下方示例存放在[@careteen/micro-fe/system.js](https://github.com/careteenL/micro-fe/tree/master/system.js)，感兴趣可以前往调试。
+
 #### 新建项目并配置
 
 安装依赖
@@ -258,6 +260,8 @@ System.register(["react","react-dom"], function(__WEBPACK_DYNAMIC_EXPORT__, __sy
 下面将做个简易实现。
 
 ### SystemJS原理
+
+> 下方实现原理代码存放在[@careteen/micro-fe/system.js/dest/index.html](https://github.com/careteenL/micro-fe/blob/master/system.js/dest/index.html)，感兴趣可以前往调试。
 
 首先提供构造函数，并将`window`的属性存一份，目的是查找对`window`属性进行的修改。
 
