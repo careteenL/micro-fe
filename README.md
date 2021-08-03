@@ -548,16 +548,482 @@ $ cd ../slave-react && yarn start
 
 ![single-spa-base](./assets/single-spa-base.png)
 
-手动输入 http://localhost:9000/vue/
+手动输入 http://localhost:9000/vue/ 并可以切换路由
 
 ![single-spa-vue](./assets/single-spa-vue.png)
 
-手动输入 http://localhost:9000/react/
+手动输入 http://localhost:9000/react/ 并可以切换路由
 
 ![single-spa-react](./assets/single-spa-react.png)
 
 ### single spa原理
 
+从`single spa`使用中，可以发现主要是两个方法`registerApplication`和`start`。
+
+先新建`single-spa/example/index.html`文件，使用cdn的形式使用`single-spa`
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>my single spa demo</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/single-
+spa/5.9.3/umd/single-spa.min.js"></script>
+  </head>
+
+  <body>
+    <!-- 切换导航加载不同的应用 -->
+    <a href="#/a">a应用</a>
+    <a href="#/b">b应用</a>
+    <!-- 源码中single-spa 是用rollup打包的 -->
+    <script type="module">
+      const { registerApplication, start } = singleSpa;
+      // 接入协议
+      let app1 = {
+        bootstrap: [
+          // 这东西只执行一次 ，加载完应用，不需要每次都重复加载
+          async (customProps) => {
+            // koa中的中间件 vueRouter4 中间件
+            console.log("app1 启动~1", customProps);
+          },
+          async () => {
+            console.log("app1 启动~2");
+          },
+        ],
+        mount: async (customProps) => {
+          console.log("app1 mount");
+        },
+        unmount: async (customProps) => {
+          console.log("app1 unmount");
+        },
+      };
+      let app2 = {
+        bootstrap: [
+          async () => {
+            console.log("app2 启动~1");
+          },
+          async () => {
+            console.log("app2 启动~2");
+          },
+        ],
+        mount: async () => {
+          console.log("app2 mount");
+        },
+        unmount: async () => {
+          console.log("app2 unmount");
+        },
+      };
+
+      const customProps = { name: "single spa" };
+      // 注册微应用
+      registerApplication(
+        "app1", // 这个名字可以用于过滤防止加载重复的应用
+        async () => {
+          return app1;
+        },
+        (location) => location.hash == "#/a",
+        customProps
+      );
+      registerApplication(
+        "app2", // 这个名字可以用于过滤防止加载重复的应用
+        async () => {
+          return app2;
+        },
+        (location) => location.hash == "#/b",
+        customProps
+      );
+
+      start();
+    </script>
+  </body>
+</html>
+
+```
+
+接着去实现核心方法
+
+新建`single-spa/src/single-spa.js`
+
+```js
+export { registerApplication } from './applications/apps.js';
+export { start } from './start.js';
+```
+
+新建`single-spa/src/applications/app.js`
+
+```js
+import { reroute } from "../navigation/reroute.js";
+import { NOT_LOADED } from "./app.helpers.js";
+
+export const apps = [];
+export function registerApplication(appName, loadApp, activeWhen, customProps) {
+  const registeration = {
+    name: appName,
+    loadApp,
+    activeWhen,
+    customProps,
+    status: NOT_LOADED,
+  };
+  apps.push(registeration);
+  reroute();
+}
+```
+
+维护数组`apps`存放所有的子应用，每个子应用需要的传参如下
+
+- appName: 应用名称
+- loadApp: 应用的加载函数 此函数会返回 bootstrap  mount unmount
+- activeWhen: 当前什么时候激活 location => location.hash == '#/a'
+- customProps: 用户的自定义参数
+- status: 应用状态
+
+将子应用保存到`apps`中，后续可以在数组里晒选需要的app是加载 还是 卸载 还是挂载
+
+还需要调用`reroute`，重写路径， 后续切换路由要再次做这些事 ，这也是`single-spa`的核心。
+
+`NOT_LOADED(未加载)`为应用的默认状态，那应用还存在哪些状态呢？
+
+![single-spa-status](./assets/single-spa-status.png)
+
+新建`single-spa/src/applications/app.helpers.js`存放所有状态
+
+```js
+export const NOT_LOADED = "NOT_LOADED"; // 应用默认状态是未加载状态
+export const LOADING_SOURCE_CODE = "LOADING_SOURCE_CODE"; // 正在加载文件资源
+export const NOT_BOOTSTRAPPED = "NOT_BOOTSTRAPPED"; // 此时没有调用bootstrap
+export const BOOTSTRAPPING = "BOOTSTRAPPING"; // 正在启动中,此时bootstrap调用完毕后，需要表示成没有挂载
+export const NOT_MOUNTED = "NOT_MOUNTED"; // 调用了mount方法
+export const MOUNTED = "MOUNTED"; // 表示挂载成功
+export const UNMOUNTING = "UNMOUNTING"; // 卸载中， 卸载后回到NOT_MOUNTED
+
+// 当前应用是否被挂载了 状态是不是MOUNTED
+export function isActive(app) {
+  return app.status == MOUNTED;
+}
+
+// 路径匹配到才会加载应用
+export function shouldBeActive(app) {
+  // 如果返回的是true 就要进行加载
+  return app.activeWhen(window.location);
+}
+```
+
+于此同时还是提供几个方法判断当前应用所处状态。
+
+然后再提供根据`app`状态对所有注册的app进行分类
+
+```js
+// `single-spa/src/applications/app.helpers.js`
+export function getAppChanges() {
+  // 拿不到所有app的？
+  const appsToLoad = []; // 需要加载的列表
+  const appsToMount = []; // 需要挂载的列表
+  const appsToUnmount = []; // 需要移除的列表
+  apps.forEach((app) => {
+    const appShouldBeActive = shouldBeActive(app); // 看一下这个app是否要加载
+    switch (app.status) {
+      case NOT_LOADED:
+      case LOADING_SOURCE_CODE:
+        if (appShouldBeActive) {
+          appsToLoad.push(app); // 没有被加载就是要去加载的app，如果正在加载资源 说明也没有加载过
+        }
+        break;
+      case NOT_BOOTSTRAPPED:
+      case NOT_MOUNTED:
+        if (appShouldBeActive) {
+          appsToMount.push(app); // 没启动柜， 并且没挂载过 说明等会要挂载他
+        }
+        break;
+      case MOUNTED:
+        if (!appShouldBeActive) {
+          appsToUnmount.push(app); // 正在挂载中但是路径不匹配了 就是要卸载的
+        }
+      default:
+        break;
+    }
+  });
+  return { appsToLoad, appsToMount, appsToUnmount };
+}
+
+```
+
+然后开始实现`single-spa/src/navigation/reroute.js`的核心方法
+
+```js
+import {
+  getAppChanges,
+} from "../applications/app.helpers.js";
+export function reroute() {
+  // 所有的核心逻辑都在这里
+  const { appsToLoad, appsToMount, appsToUnmount } = getAppChanges();
+  return loadApps();
+  function loadApps() {
+  // 获取所有需要加载的app,调用加载逻辑
+  const loadPromises = appsToLoad.map(toLoadPromise); // 调用加载逻辑
+    return Promise.all(loadPromises)
+  }
+}
+```
+
+于此同时再提供工具方法，方便处理传参进来的生命周期钩子是数组的场景
+
+```js
+function flattenFnArray(fns) {
+  fns = Array.isArray(fns) ? fns : [fns];
+  return function (customProps) {
+    return fns.reduce(
+      (resultPromise, fn) => resultPromise.then(() => fn(customProps),
+      Promise.resolve()
+    );
+  };
+}
+```
+
+实现原理类似于`koa中的中间件`，将多个promise组合成一个promise链。
+
+再提供`toLoadPromise`， 只有当子应用是`NOT_LOADED` 的时候才需要加载，并使用`flattenFnArray`将各个生命周期进行处理
+
+```js
+function toLoadPromise(app) {
+  return Promise.resolve().then(() => {
+    if (app.status !== NOT_LOADED) {
+      return app;
+    }
+    app.status = LOADING_SOURCE_CODE;
+    return app.loadApp().then((val) => {
+      let { bootstrap, mount, unmount } = val; // 获取应用的接入协议，子应用暴露的方法
+      app.status = NOT_BOOTSTRAPPED;
+      app.bootstrap = flattenFnArray(bootstrap);
+      app.mount = flattenFnArray(mount);
+      app.unmount = flattenFnArray(unmount);
+
+      return app;
+    });
+  });
+}
+```
+
+然后实现`single-spa/src/start.js`
+
+```js
+import { reroute } from "./navigation/reroute.js";
+export let started = false;
+export function start() {
+  started = true; // 开始启动了
+  reroute();
+}
+```
+
+接着需要对`reroute`方法进行完善，将不需要的组件全部卸载，将需要加载的组件去`加载-> 启动 -> 挂载`，如果已经加载完毕，那么直接启动和挂载。
+
+```js
+export function reroute() {
+  const { appsToLoad, appsToMount, appsToUnmount } = getAppChanges();
+  if (started) { // 启动应用
+    return performAppChanges();
+  }
+  function performAppChanges() { 
+    appsToUnmount.map(toUnmountPromise);
+    appsToLoad.map(app => toLoadPromise(app).then((app) => tryBootstrapAndMount(app)))
+    appsToMount.map(appToMount => tryBootstrapAndMount(appToMount))
+  }
+}
+```
+
+其核心就是**卸载需要卸载的应用-> 加载应用 -> 启动应用 -> 挂载应用**
+
+
+然后提供`toUnmountPromise`，标记成正在卸载，调用卸载逻辑 ， 并且标记成 未挂载。
+
+```js
+function toUnmountPromise(app) {
+  return Promise.resolve().then(() => {
+    // 如果不是挂载状态 直接跳出
+    if (app.status !== MOUNTED) {
+      return app;
+    }
+    app.status = UNMOUNTING;
+    return app.unmount(app.customProps).then(() => {
+      app.status = NOT_MOUNTED;
+    });
+  });
+}
+```
+
+以及`tryBootstrapAndMount`，提供`a/b`应用的切换
+
+```js
+// a -> b b->a a->b
+function tryBootstrapAndMount(app, unmountPromises) {
+  return Promise.resolve().then(() => {
+    if (shouldBeActive(app)) {
+      return toBootStrapPromise(app).then((app) =>
+        unmountPromises.then(() => {
+          capturedEventListeners.hashchange.forEach((item) => item());
+          return toMountPromise(app);
+        })
+      );
+    }
+  });
+}
+```
+
+实现`toBootStrapPromise`启动应用
+
+```js
+function toBootStrapPromise(app) {
+  return Promise.resolve().then(() => {
+    if (app.status !== NOT_BOOTSTRAPPED) {
+      return app;
+    }
+    app.status = BOOTSTRAPPING;
+    return app.bootstrap(app.customProps).then(() => {
+      app.status = NOT_MOUNTED;
+      return app;
+    });
+  });
+}
+```
+
+实现`toMountPromise`加载应用
+
+```js
+function toMountPromise(app) {
+  return Promise.resolve().then(() => {
+    if (app.status !== NOT_MOUNTED) {
+      return app;
+    }
+    return app.mount(app.customProps).then(() => {
+      app.status = MOUNTED;
+      return app;
+    });
+  });
+}
+```
+
+上述实现了子应用各个状态的切换逻辑，下面还需要将路由进行重写。
+
+新建`single-spa/src/navigation/navigation-events.js`，监听hashchange和popstate，路径变化时重新初始化应用。
+
+```js
+import { reroute } from "./reroute.js";
+
+function urlRoute() {
+  reroute();
+}
+window.addEventListener("hashchange", urlRoute);
+window.addEventListener("popstate", urlRoute);
+```
+
+需要对浏览器的事件进行拦截，其实现方式和`vue-router`类似，使用`AOP`的思想实现的。
+
+因为子应用里面也可能会有路由系统，需要先加载父应用的事件，再去调用子应用。
+
+```js
+const routerEventsListeningTo = ["hashchange", "popstate"];
+export const capturedEventListeners = {
+  hashchange: [],
+  popstate: [],
+};
+const originalAddEventListener = window.addEventListener;
+const originalRemoveEventLister = window.removeEventListener;
+
+window.addEventListener = function (eventName, fn) {
+  if (
+    routerEventsListeningTo.includes(eventName) &&
+    !capturedEventListeners[eventName].some((l) => fn == l)
+  ) {
+    return capturedEventListeners[eventName].push(fn);
+  }
+  return originalAddEventListener.apply(this, arguments);
+};
+
+window.removeEventListener = function (eventName, fn) {
+  if (routerEventsListeningTo.includes(eventName)) {
+    return (capturedEventListeners[eventName] = capturedEventListeners[
+      eventName
+    ].filter((l) => fn != l));
+  }
+  return originalRemoveEventLister.apply(this, arguments);
+};
+```
+
+需要对跳转方法进行拦截，例如 vue-router内部会通过pushState() 不改路径改状态，所以还是要处理下。如果路径不一样，也需要重启应用。
+
+
+```js
+function patchedUpdateState(updateState, methodName) {
+  return function() {
+    const urlBefore = window.location.href;
+    const result = updateState.apply(this, arguments);
+    const urlAfter = window.location.href;
+    if (urlBefore !== urlAfter) {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+    return result;
+  }
+}
+window.history.pushState = patchedUpdateState(window.history.pushState, 'pushState');
+window.history.replaceState = patchedUpdateState(window.history.replaceState, 'replaceState')
+```
+
+提供触发事件的方法
+
+```js
+export function callCapturedEventListeners(eventArguments) { // 触发捕获的事件
+  if (eventArguments) {
+    const eventType = eventArguments[0].type;
+    // 触发缓存中的方法
+    if (routingEventsListeningTo.includes(eventType)) {
+      capturedEventListeners[eventType].forEach(listener => {
+        listener.apply(this, eventArguments);
+      })
+    }
+  } 
+}
+```
+
+改动`reroute`逻辑，启动完成需要调用`callAllEventListeners`，应用卸载完毕也需要调用`callAllEventListeners`。
+
+```js
+export function reroute() {
+  const { appsToLoad, appsToMount, appsToUnmount } = getAppChanges();
+  if (started) {
+    return performAppChanges();
+  }
+  return loadApps();
+
+  function loadApps() {
+    const loadPromises = appsToLoad.map(toLoadPromise);
+    return Promise.all(loadPromises).then(callAllEventListeners); // ++
+  }
+  function performAppChanges() {
+    let unmountPromises = Promise.all(appsToUnmount.map(toUnmountPromise)).then(callAllEventListeners); // ++
+
+    appsToLoad.map((app) =>
+      toLoadPromise(app).then((app) =>
+        tryBootstrapAndMount(app, unmountPromises)
+      )
+    );
+    appsToMount.map((app) => tryBootstrapAndMount(app, unmountPromises));
+  }
+}
+```
+
+上述代码已经实现了基本功能
+
+```shell
+$ cd single-spa
+$ yarn
+$ yarn dev
+```
+
+打开 http://127.0.0.1:5000/example 点击切换a b应用查看打印结果
+
+![my-single-spa-result](./assets/my-single-spa-result.png)
 
 
 ## qiankun

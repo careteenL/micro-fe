@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>my single spa demo</title>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/single-
+spa/5.9.3/umd/single-spa.min.js"></script> -->
+  </head>
+
+  <body>
+    <!-- 切换导航加载不同的应用 -->
+    <a href="#/a">a应用</a>
+    <a href="#/b">b应用</a>
+    <script type="module">
+      // const { registerApplication, start } = singleSpa;
+      import { registerApplication, start } from "../src/single-spa.js";
+      // 接入协议
+      let app1 = {
+        bootstrap: [
+          async (customProps) => {
+            console.log("app1 启动~1", customProps);
+          },
+          async () => {
+            console.log("app1 启动~2");
+          },
+        ],
+        mount: async (customProps) => {
+          console.log("app1 mount");
+        },
+        unmount: async (customProps) => {
+          console.log("app1 unmount");
+        },
+      };
+      let app2 = {
+        bootstrap: [
+          async () => {
+            console.log("app2 启动~1");
+          },
+          async () => {
+            console.log("app2 启动~2");
+          },
+        ],
+        mount: async () => {
+          console.log("app2 mount");
+        },
+        unmount: async () => {
+          console.log("app2 unmount");
+        },
+      };
+
+      const customProps = { name: "my single spa" };
+      // 注册微应用
+      registerApplication(
+        "app1",
+        async () => {
+          return app1;
+        },
+        (location) => location.hash == "#/a",
+        customProps
+      );
+      registerApplication(
+        "app2",
+        async () => {
+          return app2;
+        },
+        (location) => location.hash == "#/b",
+        customProps
+      );
+
+      start();
+
+      window.addEventListener("hashchange", function () {
+        console.log("hash-change-my");
+      });
+    </script>
+  </body>
+</html>
