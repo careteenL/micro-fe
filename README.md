@@ -1,3 +1,40 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [深入浅出微前端](#%E6%B7%B1%E5%85%A5%E6%B5%85%E5%87%BA%E5%BE%AE%E5%89%8D%E7%AB%AF)
+  - [背景](#%E8%83%8C%E6%99%AF)
+  - [什么是微前端](#%E4%BB%80%E4%B9%88%E6%98%AF%E5%BE%AE%E5%89%8D%E7%AB%AF)
+    - [微前端优势](#%E5%BE%AE%E5%89%8D%E7%AB%AF%E4%BC%98%E5%8A%BF)
+    - [微前端解决方案](#%E5%BE%AE%E5%89%8D%E7%AB%AF%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88)
+  - [为什么不是TA](#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%98%AFta)
+    - [为什么不是 iframe](#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%98%AF-iframe)
+    - [为什么不是 Web Component](#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%98%AF-web-component)
+    - [为什么不是ESM](#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%98%AFesm)
+  - [SingleSpa](#singlespa)
+    - [SystemJS使用](#systemjs%E4%BD%BF%E7%94%A8)
+      - [新建项目并配置](#%E6%96%B0%E5%BB%BA%E9%A1%B9%E7%9B%AE%E5%B9%B6%E9%85%8D%E7%BD%AE)
+      - [编写js、html代码](#%E7%BC%96%E5%86%99jshtml%E4%BB%A3%E7%A0%81)
+      - [查看dest目录](#%E6%9F%A5%E7%9C%8Bdest%E7%9B%AE%E5%BD%95)
+    - [SystemJS原理](#systemjs%E5%8E%9F%E7%90%86)
+      - [核心方法-register](#%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95-register)
+      - [核心方法-import](#%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95-import)
+    - [SingleSpa使用](#singlespa%E4%BD%BF%E7%94%A8)
+      - [创建基座](#%E5%88%9B%E5%BB%BA%E5%9F%BA%E5%BA%A7)
+      - [创建vue项目](#%E5%88%9B%E5%BB%BAvue%E9%A1%B9%E7%9B%AE)
+      - [创建react项目](#%E5%88%9B%E5%BB%BAreact%E9%A1%B9%E7%9B%AE)
+      - [启动项目](#%E5%90%AF%E5%8A%A8%E9%A1%B9%E7%9B%AE)
+    - [SingleSpa原理](#singlespa%E5%8E%9F%E7%90%86)
+      - [原生Demo](#%E5%8E%9F%E7%94%9Fdemo)
+      - [核心方法-registerApplication](#%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95-registerapplication)
+      - [状态机](#%E7%8A%B6%E6%80%81%E6%9C%BA)
+      - [核心方法-start](#%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95-start)
+      - [核心逻辑-reroute](#%E6%A0%B8%E5%BF%83%E9%80%BB%E8%BE%91-reroute)
+      - [完善核心逻辑-reroute](#%E5%AE%8C%E5%96%84%E6%A0%B8%E5%BF%83%E9%80%BB%E8%BE%91-reroute)
+  - [qiankun](#qiankun)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # 深入浅出微前端
 
 - 背景？
@@ -103,7 +140,7 @@
 
 ![es-module](./assets/es-module.png)
 
-## single spa
+## SingleSpa
 
 查看`single-spa`配置文件[rollup.config.js](https://github.com/single-spa/single-spa/blob/master/rollup.config.js#L44)可得知，使用了`rollup`做打包工具，并采用的`system`模块规范做输出。
 
@@ -286,6 +323,8 @@ const getGlobalLastPro = () => {
 saveGlobalPro();
 ```
 
+#### 核心方法-register
+
 实现`register`方法，主要是对前置依赖做存储，方便后面加载文件时取值加载。
 
 ```js
@@ -318,6 +357,8 @@ function load(id) {
   });
 }
 ```
+
+#### 核心方法-import
 
 实现`import`方法，传参为`id`即入口文件，加载入口文件后，解析[查看dest目录](#查看dest目录)中的`setters和execute`。
 
@@ -371,7 +412,7 @@ let System = new SystemJS();
 System.import("./index.js").then(() => {});
 ```
 
-### single spa使用
+### SingleSpa使用
 
 > 下方示例代码存放在[@careteen/micro-fe/single-spa](https://github.com/careteenL/micro-fe/tree/master/single-spa)，感兴趣可以前往调试。
 
@@ -556,11 +597,15 @@ $ cd ../slave-react && yarn start
 
 ![single-spa-react](./assets/single-spa-react.png)
 
-### single spa原理
+### SingleSpa原理
+
+> 下方原理实现代码存放在[@careteen/micro-fe/single-spa/single-spa](https://github.com/careteenL/micro-fe/tree/master/single-spa/single-spa)，感兴趣可以前往调试。
 
 从`single spa`使用中，可以发现主要是两个方法`registerApplication`和`start`。
 
 先新建`single-spa/example/index.html`文件，使用cdn的形式使用`single-spa`
+
+#### 原生Demo
 
 ```html
 <!DOCTYPE html>
@@ -643,6 +688,8 @@ spa/5.9.3/umd/single-spa.min.js"></script>
 
 ```
 
+#### 核心方法-registerApplication
+
 接着去实现核心方法
 
 新建`single-spa/src/single-spa.js`
@@ -683,6 +730,8 @@ export function registerApplication(appName, loadApp, activeWhen, customProps) {
 将子应用保存到`apps`中，后续可以在数组里晒选需要的app是加载 还是 卸载 还是挂载
 
 还需要调用`reroute`，重写路径， 后续切换路由要再次做这些事 ，这也是`single-spa`的核心。
+
+#### 状态机
 
 `NOT_LOADED(未加载)`为应用的默认状态，那应用还存在哪些状态呢？
 
@@ -806,6 +855,8 @@ function toLoadPromise(app) {
 }
 ```
 
+#### 核心方法-start
+
 然后实现`single-spa/src/start.js`
 
 ```js
@@ -816,6 +867,8 @@ export function start() {
   reroute();
 }
 ```
+
+#### 核心逻辑-reroute
 
 接着需要对`reroute`方法进行完善，将不需要的组件全部卸载，将需要加载的组件去`加载-> 启动 -> 挂载`，如果已经加载完毕，那么直接启动和挂载。
 
@@ -985,6 +1038,8 @@ export function callCapturedEventListeners(eventArguments) { // 触发捕获的�
   } 
 }
 ```
+
+#### 完善核心逻辑-reroute
 
 改动`reroute`逻辑，启动完成需要调用`callAllEventListeners`，应用卸载完毕也需要调用`callAllEventListeners`。
 
