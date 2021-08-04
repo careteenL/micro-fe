@@ -1134,7 +1134,7 @@ $ yarn dev
 
 在`single-spa`的基础上，`qiankun`还实现了如下特性
 
-- 使用`html-import`取代`system.js`加载子应用
+- 使用`import-html-entry`取代`system.js`加载子应用
 - 提供多种样式隔离方案
 - 提供多种JS隔离方案
 
