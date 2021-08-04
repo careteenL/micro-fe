@@ -44,25 +44,23 @@
       - [prefetch](#prefetch)
       - [loadApp](#loadapp)
       - [createSandboxContainer](#createsandboxcontainer)
+      - [Proxy Sandbox](#proxy-sandbox)
+      - [Snapshot Sandbox](#snapshot-sandbox)
+      - [Style Shadow Dom Sandbox](#style-shadow-dom-sandbox)
+      - [Style Scope Sandbox](#style-scope-sandbox)
+      - [父子应用通信方式](#%E7%88%B6%E5%AD%90%E5%BA%94%E7%94%A8%E9%80%9A%E4%BF%A1%E6%96%B9%E5%BC%8F)
+    - [qiankun小结](#qiankun%E5%B0%8F%E7%BB%93)
+  - [总结](#%E6%80%BB%E7%BB%93)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 # 深入浅出微前端
 
-- 背景？
-- 什么是微前端？
-- 对比各方案优缺点？
-- systemjs是什么？
-- single-spa使用和原理？
-- qiankun使用和原理？
-- umi-qiankun如何工作？
-- webpack5 module federation是什么？
-- emp实践
-- 智慧案场微前端方案
-  - 架构设计？umi-qiankun
-  - 子产品接入指南？
-  - 如何借助@focus/cli更好的工作？
-  - @focus/pro-com
+![cover](./assets/cover.png)
+
+> 长文警告⚠️，目的是通过从使用到实现，一层层剖析微前端。
+
+> 文章首发于[@careteen/micro-fe](https://github.com/careteenL/micro-fe)，转载请注明来源即可。
 
 ## 背景
 
@@ -1589,7 +1587,174 @@ function prefetch(entry: Entry, opts?: ImportEntryOpts): void {
 
 #### createSandboxContainer
 
-接下来是如何创建沙箱的实现
+接下来是如何实现创建沙箱
 
 ![qiankun-createSandboxContainer](./assets/qiankun-createSandboxContainer.jpg)
+
+创建沙箱会先判断浏览器是否支持`Proxy`，如果支持并不是`useLooseSandbox`模式，则使用**代理沙箱实现**，如果不支持则采用**快照沙箱**
+
+#### Proxy Sandbox
+
+![qiankun-proxy-sandbox](./assets/qiankun-proxy-sandbox.png)
+
+```ts
+class ProxySandbox {
+  constructor() {
+    const rawWindow = window
+    const fakeWindow = {}
+    const proxy = new Proxy(fakeWindow, {
+      set(target, p, value) {
+        target[p] = value
+        return true
+      },
+      get(target, p) {
+        return target[p] || rawWindow[p]
+      },
+    })
+    this.proxy = proxy
+  }
+}
+
+let sandbox1 = new ProxySandbox()
+let sandbox2 = new ProxySandbox()
+
+window.name = '搜狐焦点'
+((window) => {
+  window.name = '智能话机'
+  console.log(window.name)
+})(sandbox1.proxy)
+
+((window) => {
+  window.name = '识客宝'
+  console.log(window.name)
+})(sandbox2.proxy)
+```
+
+其原理主要是代理原生`window`，在取值时优先从`proxy window`上获取，如果没有值再从`真实 window`上获取；在赋值时只改动`proxy window`，进而达到和主应用隔离。这只是简易实现，`qiankun`的[ProxySandbox实现](https://github.com/careteenL/qiankun/blob/master/src/sandbox/proxySandbox.ts#L177)。
+
+
+#### Snapshot Sandbox
+
+> [源码实现代码](https://github.com/careteenL/qiankun/blob/master/src/sandbox/snapshotSandbox.ts#L40
+
+```ts
+function iter(obj: typeof window, callbackFn: (prop: any) => void) {
+  // eslint-disable-next-line guard-for-in, no-restricted-syntax
+  for (const prop in obj) {
+    // patch for clearInterval for compatible reason, see #1490
+    if (obj.hasOwnProperty(prop) || prop === 'clearInterval') {
+      callbackFn(prop);
+    }
+  }
+}
+// ...
+active() {
+  // 记录当前快照
+  this.windowSnapshot = {} as Window;
+  iter(window, (prop) => {
+    this.windowSnapshot[prop] = window[prop];
+  });
+
+  // 恢复之前的变更
+  Object.keys(this.modifyPropsMap).forEach((p: any) => {
+    window[p] = this.modifyPropsMap[p];
+  });
+
+  this.sandboxRunning = true;
+}
+```
+
+主要是对`window`的所有属性进行了一个拍照。存在的问题就是多实例的情况会混乱，所以在浏览器不支持`Proxy`且设置非单例的情况下，`qiankun`会报错。
+
+#### Style Shadow Dom Sandbox
+
+> [源码实现代码](https://github.com/careteenL/qiankun/blob/master/src/loader.ts#L134)
+
+当设置`strictStyleIsolation=true`时，会开启`Shadow Dom`样式沙箱。表现如下，会包裹一层`shadow dom`，做到真正意义上的样式隔离，但缺点就是子应用想要复用父应用的样式时做不到。
+
+![qiankun-css-shadow-dom](./assets/qiankun-css-shadow-dom.jpg)
+
+#### Style Scope Sandbox
+
+> [源码实现代码](https://github.com/careteenL/qiankun/blob/master/src/sandbox/patchers/dynamicAppend/common.ts#L196)
+
+`qiankun`也提供设置`experimentalStyleIsolation=true`开启`scope`样式隔离，表现如下，使用`div`包裹子应用，并将子应用的顶级样式加上`子应用名称`前缀进行样式隔离。其中还将标签选择器加上`[data-qainkun]="slave-name"`。
+
+![qiankun-css-scope](./assets/qiankun-css-scope.png)
+![qiankun-css-scope-2](./assets/qiankun-css-scope-2.png)
+
+#### 父子应用通信方式
+
+> [源码实现代码](https://github.com/careteenL/qiankun/blob/master/src/globalState.ts#L22)
+
+基于发布订阅实现。
+
+- **setGlobalState**：更新 store 数据
+  - 对输入 state 的第一层属性做校验，只有初始化时声明过的第一层（bucket）属性才会被更改
+  - 修改 store 并触发全局监听
+- **onGlobalStateChange**：全局依赖监听
+  - 收集 setState 时所需要触发的依赖
+- **offGlobalStateChange**：注销该应用下的依赖
+
+```ts
+export function getMicroAppStateActions(id: string, isMaster?: boolean): MicroAppStateActions {
+  return {
+    onGlobalStateChange(callback: OnGlobalStateChangeCallback, fireImmediately?: boolean) {
+      if (!(callback instanceof Function)) {
+        console.error('[qiankun] callback must be function!');
+        return;
+      }
+      if (deps[id]) {
+        console.warn(`[qiankun] '${id}' global listener already exists before this, new listener will overwrite it.`);
+      }
+      deps[id] = callback;
+      if (fireImmediately) {
+        const cloneState = cloneDeep(globalState);
+        callback(cloneState, cloneState);
+      }
+    },
+    setGlobalState(state: Record<string, any> = {}) {
+      if (state === globalState) {
+        console.warn('[qiankun] state has not changed！');
+        return false;
+      }
+      const changeKeys: string[] = [];
+      const prevGlobalState = cloneDeep(globalState);
+      globalState = cloneDeep(
+        Object.keys(state).reduce((_globalState, changeKey) => {
+          if (isMaster || _globalState.hasOwnProperty(changeKey)) {
+            changeKeys.push(changeKey);
+            return Object.assign(_globalState, { [changeKey]: state[changeKey] });
+          }
+          console.warn(`[qiankun] '${changeKey}' not declared when init state！`);
+          return _globalState;
+        }, globalState),
+      );
+      if (changeKeys.length === 0) {
+        console.warn('[qiankun] state has not changed！');
+        return false;
+      }
+      emitGlobal(globalState, prevGlobalState);
+      return true;
+    },
+    offGlobalStateChange() {
+      delete deps[id];
+      return true;
+    },
+  };
+}
+```
+
+### qiankun小结
+
+- 基于 `single spa`的上层封装
+- 提供`shadow dom`和`scope`样式隔离方案
+- 解决`proxy sandbox`和`snapshot sanbox`js隔离方案
+- 基于`发布订阅`更好的服务于`react setState`
+- 还提供[@umijs/plugin-qiankun](https://umijs.org/zh-CN/plugins/plugin-qiankun)插件能在`umi`应用下更好的接入
+
+
+## 总结
+
+除了`single-spa`这种基于底座的微前端解决方案， [webpack5 module federation]()webpack5的联邦模块也能实现，[YY团队的EMP](https://github.com/efoxTeam/emp)基于此实现了**去中心模式**，脱离基座模式，每个应用之间都可以批次分享资源。可以通过[这篇文章](https://dev.to/marais/webpack-5-and-module-federation-4j1i)尝尝鲜，后面再继续研究。
 

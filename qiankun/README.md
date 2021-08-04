@@ -4,7 +4,7 @@
 
 ```shell
 $ cd base && yarn start
-$ cd ../slave-vue && yarn serve
+$ cd ../slave-vue && yarn start
 $ cd ../slave-react && yarn start
 ```
 

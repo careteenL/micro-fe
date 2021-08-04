@@ -40,7 +40,7 @@ registerMicroApps(
 );
 start({
   sandbox: {
-    // experimentalStyleIsolation:true
-    strictStyleIsolation: true,
+    experimentalStyleIsolation:true
+    // strictStyleIsolation: true,
   },
 });
