@@ -685,8 +685,27 @@ spa/5.9.3/umd/single-spa.min.js"></script>
     </script>
   </body>
 </html>
-
 ```
+
+对`package.json`做如下配置
+
+```json
+"scripts": {
+  "dev": "http-server -p 5000"
+}
+```
+
+然后运行
+
+```shell
+$ cd single-spa
+$ yarn
+$ yarn dev
+```
+
+打开 http://127.0.0.1:5000/example 点击切换a b应用查看打印结果
+
+![my-single-spa-result](./assets/my-single-spa-result.png)
 
 #### 核心方法-registerApplication
 
@@ -1076,11 +1095,291 @@ $ yarn
 $ yarn dev
 ```
 
-打开 http://127.0.0.1:5000/example 点击切换a b应用查看打印结果
+打开 http://127.0.0.1:5000/example 点击切换a b应用查看打印结果，表现同[原生Demo](#原生Demo)的结果。
 
 ![my-single-spa-result](./assets/my-single-spa-result.png)
+
+### SingleSpa小结
+
+[single-spa](https://github.com/single-spa/single-spa)提供了主应用作为基座，通过路由匹配加载不同子应用的模式。具备如下优点
+
+- **技术栈无关**： 独立开发、独立部署、增量升级、独立运行时
+- **提供生命周期概念**：负责调度子应用的生命周期， 挟持 url 变化事件和函数，url 变化时匹配对应子应用，并执行生命周期流程
+
+但是仍然存在一些问题
+
+- **样式隔离**：子应用样式可能影响主应用，需要通过类似于`BEM`约定式方案解决。
+- **JS隔离**：主子应用共用`DOM、BOM`API，例如在`window`上赋值同一个同名变量，将互相影响，也需要有隔离方案。
 
 
 ## qiankun
 
+[qiankun](https://github.com/umijs/qiankun)的灵感来自并基于`single-spa`，
+
+- **简单**: 任意 js 框架均可使用。微应用接入像使用接入一个 iframe 系统一样简单， 但实际不是 iframe 。 
+- **完备**: 几乎包含所有构建微前端系统时所需要的基本能力，如 样式隔离、 js 沙箱、 预加载等。 
+- **生产可用**: 已在蚂蚁内外经受过足够大量的线上系统的考验及打磨，健壮性值得信 赖。
+
+在`single-spa`的基础上，`qiankun`还实现了如下特性
+
+- 使用`html-import`取代`system.js`加载子应用
+- 提供多种样式隔离方案
+- 提供多种JS隔离方案
+
+### qiankun使用
+
+下面实例采用`react`作为基座，并提供一个`vue`子应用和一个`react`子应用
+
+#### 提供基座
+
+```shell
+$ create-react-app base
+$ yarn add react-router-dom qiankun
+```
+
+提供`/vue和/react`路由
+```js
+import { BrowserRouter as Router, Link } from "react-router-dom";
+function App() {
+  return (
+    <div className="App">
+      <Router>
+        <Link to="/vue">vue应用</Link>
+        <Link to="/react">react应用</Link>
+      </Router>
+      <div id="container"></div>
+    </div>
+  );
+}
+export default App;
+```
+
+在`src/registerApps.js`中配置两个子应用入口
+
+```js
+import { registerMicroApps, start } from "qiankun";
+
+const loader = (loading) => {
+  console.log(loading);
+};
+registerMicroApps(
+  [
+    {
+      name: "slave-vue",
+      entry: "//localhost:20000",
+      container: "#container",
+      activeRule: "/vue",
+      loader,
+    },
+    {
+      name: "slave-react",
+      entry: "//localhost:30000",
+      container: "#container",
+      activeRule: "/react",
+      loader,
+    },
+  ],
+  {
+    beforeLoad: () => {
+      console.log("加载前");
+    },
+    beforeMount: () => {
+      console.log("挂载前");
+    },
+    afterMount: () => {
+      console.log("挂载后");
+    },
+    beforeUnmount: () => {
+      console.log("销毁前");
+    },
+    afterUnmount: () => {
+      console.log("销毁后");
+    },
+  }
+);
+start({
+  sandbox: {
+    // experimentalStyleIsolation:true
+    strictStyleIsolation: true,
+  },
+});
+```
+
+运行命令，打开 http://localhost:3000/ 访问，下面将继续
+```shell
+yarn start
+```
+
+#### 提供Vue子应用
+
+```shell
+$ vue create slave-vue
+```
+
+![qiankun-vue](./assets/qiankun-vue.jpg)
+
+
+新建`vue.config.js`配置文件，设置`publicPath`保证子应用静态资源都是像20000端口上发送的，设置`headers`跨域保证父应用可以访问到。
+
+`qiankun`没有使用`single-spa`所使用`system.js`模块规范，而打包成`umd`形式，在`qiankun`内部使用了`fetch`去加载子应用的文件内容。
+
+```js
+module.exports = {
+  publicPath: '//localhost:20000', 
+  devServer: {
+    port: 20000,
+    headers:{
+      'Access-Control-Allow-Origin': '*'
+    }
+  },
+  configureWebpack: {
+    output: {
+      libraryTarget: 'umd',
+      library: 'slave-vue'
+    }
+  }
+}
+```
+
+使用`qiankun`和`single-spa`类似，需要在入口文件按照约定导出特定的生命周期函数`bootstrap、mount、unmount`。
+
+并且提供**独立访问**和**接入到主应用**两种场景。主要是借助`window.__POWERED_BY_QIANKUN__`字段判断是否在qiankun主应用下。
+
+```js
+import { createApp } from 'vue';
+import { createRouter, createWebHistory } from 'vue-router';
+import App from './App.vue';
+import routes from './router';
+
+let history;
+let router;
+let app;
+function render(props = {}) {
+  history = createWebHistory('/vue');
+  router = createRouter({
+    history,
+    routes
+  });
+  app = createApp(App);
+  let { container } = props;
+  app.use(router).mount(container ? container.querySelector('#app') : '#app')
+}
+
+if (!window.__POWERED_BY_QIANKUN__) { // 独立运行自己
+  render();
+}
+
+export async function bootstrap() {
+  console.log('vue3 app bootstraped');
+}
+
+export async function mount(props) {
+  console.log('vue3 app mount',);
+  render(props)
+}
+export async function unmount() {
+  console.log('vue3 app unmount');
+  history = null;
+  app = null;
+  router = null;
+}
+```
+
+运行命令，打开 http://localhost:20000/ 可独立访问
+```shell
+$ yarn serve
+```
+
+#### 提供React子应用
+
+```shell
+$ create-react-app slave-react
+$ yarn add @rescripts/cli -D
+```
+
+借助`@rescripts/cli`改react的配置`.rescriptsrc.js`
+
+输出和vue项目一样也采用`umd`模块规范。
+
+```js
+module.exports = {
+  webpack:(config)=>{
+    config.output.library = 'slave-react';  
+    config.output.libraryTarget = 'umd';
+    config.output.publicPath = '//localhost:30000/';
+    return config;
+  },
+  devServer:(config)=>{
+    config.headers = {
+      'Access-Control-Allow-Origin': '*'
+    };
+    return config;
+  }
+}
+```
+
+然后在`.env`中将端口号进行修改
+
+```shell
+PORT=30000
+WDS_SOCKET_PORT=30000
+```
+
+同vue子应用配置
+
+```js
+import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+
+function render(props = {}) {
+  let { container } = props;
+  ReactDOM.render(<App />,
+    container ? container.querySelector('#root') : document.getElementById('root')
+  );
+}
+if (!window.__POWERED_BY_QIANKUN__) {
+  render();
+}
+export async function bootstrap() {
+
+}
+export async function mount(props) {
+  render(props)
+}
+
+export async function unmount(props) {
+  const { container } = props;
+  ReactDOM.unmountComponentAtNode(container ? container.querySelector('#root') : document.getElementById('root'))
+}
+```
+
+`scripts`脚本需要做修改
+
+```json
+"scripts": {
+  "start": "rescripts start",
+  "build": "rescripts build",
+  "test": "rescripts test",
+  "eject": "rescripts eject"
+},
+```
+
+运行命令，打开 http://localhost:30000/ 可独立访问
+```shell
+$ yarn start
+```
+
+#### 查看最终效果
+
+浏览器打开 http://localhost:3000/，点击`vue应用`
+
+![qiankun-result-vue](./assets/qiankun-result-vue.png)
+
+点击`react应用`
+
+![qiankun-result-react](./assets/qiankun-result-react.png)
+
+###
 
