@@ -56,7 +56,7 @@
 
 # 深入浅出微前端
 
-![cover](./assets/cover.png)
+![cover](https://careteenl.github.io/images/micro-fe/cover.png)
 
 > 长文警告⚠️，目的是通过从使用到实现，一层层剖析微前端。
 
@@ -70,7 +70,7 @@
 
 比如我们公司的权限管理后台，首页中罗列了各个系统的入口，每个系统由单独仓库管理，点击具体系统，打开新窗口进行访问。
 
-![admin-panel](./assets/admin-panel.jpg)
+![admin-panel](https://careteenl.github.io/images/micro-fe/admin-panel.jpg)
 
 由于多个应用一级域名一致，使用不同二级域名区分。`cookie`存放在一级域名下，所以各应用可以借此实现用户信息的一致性。但是对于**头部、左侧菜单**通用的模块，以及多个应用之间如何实现资源共享？
 
@@ -88,7 +88,7 @@
 
 在2016年，微前端的概念诞生。[micro-frontends](https://micro-frontends.org/)中定义`Techniques, strategies and recipes for building a modern web app with multiple teams that can ship features independently.`翻译成中文为`用来构建能够让 多个团队 独立交付项目代码的 现代web app 技术，策略以及实践方法`。
 
-![micro-service](./assets/micro-service.jpg)
+![micro-service](https://careteenl.github.io/images/micro-fe/micro-service.jpg)
 
 微前端也是借鉴后端微服务的思想。微前端就是将不同的功能按照不同的纬度拆分成多个子应用。通过主应用来加载这些子应用。
 
@@ -135,7 +135,7 @@
 
 但是兼容性很差，查看[can i use WebComponents](https://caniuse.com/?search=WebComponents)。
 
-![web-component](./assets/web-component.png)
+![web-component](https://careteenl.github.io/images/micro-fe/web-component.png)
 
 ### 为什么不是ESM
 
@@ -148,7 +148,7 @@
 
 但是可惜的是兼容性不好，查看[can i use import](https://caniuse.com/mdn-javascript_statements_import)。
 
-![es-module](./assets/es-module.png)
+![es-module](https://careteenl.github.io/images/micro-fe/es-module.png)
 
 ## SingleSpa
 
@@ -436,7 +436,7 @@ $ npm i -g create-single-spa
 $ create-single-spa base
 ```
 
-![create-single-spa-base](./assets/create-single-spa-base.png)
+![create-single-spa-base](https://careteenl.github.io/images/micro-fe/create-single-spa-base.png)
 
 在`src/careteen-root-config.js`文件中新增下面子应用配置
 
@@ -492,7 +492,7 @@ start({
 $ create-single-spa slave-vue
 ```
 
-![create-single-spa-vue](./assets/create-single-spa-vue.png)
+![create-single-spa-vue](https://careteenl.github.io/images/micro-fe/create-single-spa-vue.png)
 
 此处选择`vue3.x`版本。新建`vue.config.js`配置文件，配置开发端口号为`3000`
 
@@ -532,7 +532,7 @@ const router = createRouter({
 $ create-single-spa slave-react
 ```
 
-![create-single-spa-react](./assets/create-single-spa-react.png)
+![create-single-spa-react](https://careteenl.github.io/images/micro-fe/create-single-spa-react.png)
 
 修改开发端口号为`4000`
 
@@ -597,15 +597,15 @@ $ cd ../slave-react && yarn start
 
 浏览器打开 http://localhost:9000/
 
-![single-spa-base](./assets/single-spa-base.png)
+![single-spa-base](https://careteenl.github.io/images/micro-fe/single-spa-base.png)
 
 手动输入 http://localhost:9000/vue/ 并可以切换路由
 
-![single-spa-vue](./assets/single-spa-vue.png)
+![single-spa-vue](https://careteenl.github.io/images/micro-fe/single-spa-vue.png)
 
 手动输入 http://localhost:9000/react/ 并可以切换路由
 
-![single-spa-react](./assets/single-spa-react.png)
+![single-spa-react](https://careteenl.github.io/images/micro-fe/single-spa-react.png)
 
 ### SingleSpa原理
 
@@ -715,7 +715,7 @@ $ yarn dev
 
 打开 http://127.0.0.1:5000/example 点击切换a b应用查看打印结果
 
-![my-single-spa-result](./assets/my-single-spa-result.png)
+![my-single-spa-result](https://careteenl.github.io/images/micro-fe/my-single-spa-result.png)
 
 #### 核心方法-registerApplication
 
@@ -764,7 +764,7 @@ export function registerApplication(appName, loadApp, activeWhen, customProps) {
 
 `NOT_LOADED(未加载)`为应用的默认状态，那应用还存在哪些状态呢？
 
-![single-spa-status](./assets/single-spa-status.png)
+![single-spa-status](https://careteenl.github.io/images/micro-fe/single-spa-status.png)
 
 新建`single-spa/src/applications/app.helpers.js`存放所有状态
 
@@ -1107,7 +1107,7 @@ $ yarn dev
 
 打开 http://127.0.0.1:5000/example 点击切换a b应用查看打印结果，表现同[原生Demo](#原生Demo)的结果。
 
-![my-single-spa-result](./assets/my-single-spa-result.png)
+![my-single-spa-result](https://careteenl.github.io/images/micro-fe/my-single-spa-result.png)
 
 ### SingleSpa小结
 
@@ -1229,7 +1229,7 @@ yarn start
 $ vue create slave-vue
 ```
 
-![qiankun-vue](./assets/qiankun-vue.jpg)
+![qiankun-vue](https://careteenl.github.io/images/micro-fe/qiankun-vue.jpg)
 
 
 新建`vue.config.js`配置文件，设置`publicPath`保证子应用静态资源都是像20000端口上发送的，设置`headers`跨域保证父应用可以访问到。
@@ -1398,11 +1398,11 @@ start({
 
 浏览器打开 http://localhost:3000/ 点击`vue应用`
 
-![qiankun-result-vue](./assets/qiankun-result-vue.png)
+![qiankun-result-vue](https://careteenl.github.io/images/micro-fe/qiankun-result-vue.png)
 
 点击`react应用`，可观察父子应用样式互不影响。
 
-![qiankun-result-react](./assets/qiankun-result-react.png)
+![qiankun-result-react](https://careteenl.github.io/images/micro-fe/qiankun-result-react.png)
 
 ### qiankun原理
 
@@ -1414,7 +1414,7 @@ start({
 
 从入口注册方法`registerMicroApps`开始。
 
-![qiankun-registerMicroApps](./assets/qiankun-registerMicroApps.jpg)
+![qiankun-registerMicroApps](https://careteenl.github.io/images/micro-fe/qiankun-registerMicroApps.jpg)
 
 ```ts
 
@@ -1460,7 +1460,7 @@ export function registerMicroApps<T extends ObjectType>(
 
 #### start
 
-![qiankun-start](./assets/qiankun-start.png)
+![qiankun-start](https://careteenl.github.io/images/micro-fe/qiankun-start.png)
 
 ```ts
 export function start(opts: FrameworkConfiguration = {}) {
@@ -1568,7 +1568,7 @@ function prefetch(entry: Entry, opts?: ImportEntryOpts): void {
 
 当执行`start`方法后，会去执行`registerApplication`中的`loadApp`加载子应用。
 
-![qiankun-loadApp](./assets/qiankun-loadApp.png)
+![qiankun-loadApp](https://careteenl.github.io/images/micro-fe/qiankun-loadApp.png)
 
 其实现代码较多，可以前往[qiankun/loader.ts/loadApp](https://github.com/careteenL/qiankun/blob/master/src/loader.ts#L244)查看实现，有注释表明大概流程。总结下来主要做了如下几件事
 
@@ -1589,13 +1589,13 @@ function prefetch(entry: Entry, opts?: ImportEntryOpts): void {
 
 接下来是如何实现创建沙箱
 
-![qiankun-createSandboxContainer](./assets/qiankun-createSandboxContainer.jpg)
+![qiankun-createSandboxContainer](https://careteenl.github.io/images/micro-fe/qiankun-createSandboxContainer.jpg)
 
 创建沙箱会先判断浏览器是否支持`Proxy`，如果支持并不是`useLooseSandbox`模式，则使用**代理沙箱实现**，如果不支持则采用**快照沙箱**
 
 #### Proxy Sandbox
 
-![qiankun-proxy-sandbox](./assets/qiankun-proxy-sandbox.png)
+![qiankun-proxy-sandbox](https://careteenl.github.io/images/micro-fe/qiankun-proxy-sandbox.png)
 
 ```ts
 class ProxySandbox {
@@ -1672,7 +1672,7 @@ active() {
 
 当设置`strictStyleIsolation=true`时，会开启`Shadow Dom`样式沙箱。表现如下，会包裹一层`shadow dom`，做到真正意义上的样式隔离，但缺点就是子应用想要复用父应用的样式时做不到。
 
-![qiankun-css-shadow-dom](./assets/qiankun-css-shadow-dom.jpg)
+![qiankun-css-shadow-dom](https://careteenl.github.io/images/micro-fe/qiankun-css-shadow-dom.jpg)
 
 #### Style Scope Sandbox
 
@@ -1680,8 +1680,8 @@ active() {
 
 `qiankun`也提供设置`experimentalStyleIsolation=true`开启`scope`样式隔离，表现如下，使用`div`包裹子应用，并将子应用的顶级样式加上`子应用名称`前缀进行样式隔离。其中还将标签选择器加上`[data-qainkun]="slave-name"`。
 
-![qiankun-css-scope](./assets/qiankun-css-scope.png)
-![qiankun-css-scope-2](./assets/qiankun-css-scope-2.png)
+![qiankun-css-scope](https://careteenl.github.io/images/micro-fe/qiankun-css-scope.png)
+![qiankun-css-scope-2](https://careteenl.github.io/images/micro-fe/qiankun-css-scope-2.png)
 
 #### 父子应用通信方式
 
