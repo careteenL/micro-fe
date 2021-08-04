@@ -31,7 +31,19 @@
       - [核心方法-start](#%E6%A0%B8%E5%BF%83%E6%96%B9%E6%B3%95-start)
       - [核心逻辑-reroute](#%E6%A0%B8%E5%BF%83%E9%80%BB%E8%BE%91-reroute)
       - [完善核心逻辑-reroute](#%E5%AE%8C%E5%96%84%E6%A0%B8%E5%BF%83%E9%80%BB%E8%BE%91-reroute)
+    - [SingleSpa小结](#singlespa%E5%B0%8F%E7%BB%93)
   - [qiankun](#qiankun)
+    - [qiankun使用](#qiankun%E4%BD%BF%E7%94%A8)
+      - [提供基座](#%E6%8F%90%E4%BE%9B%E5%9F%BA%E5%BA%A7)
+      - [提供Vue子应用](#%E6%8F%90%E4%BE%9Bvue%E5%AD%90%E5%BA%94%E7%94%A8)
+      - [提供React子应用](#%E6%8F%90%E4%BE%9Breact%E5%AD%90%E5%BA%94%E7%94%A8)
+      - [查看最终效果](#%E6%9F%A5%E7%9C%8B%E6%9C%80%E7%BB%88%E6%95%88%E6%9E%9C)
+    - [qiankun原理](#qiankun%E5%8E%9F%E7%90%86)
+      - [registerMicroApps](#registermicroapps)
+      - [start](#start)
+      - [prefetch](#prefetch)
+      - [loadApp](#loadapp)
+      - [createSandboxContainer](#createsandboxcontainer)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1114,7 +1126,7 @@ $ yarn dev
 
 ## qiankun
 
-[qiankun](https://github.com/umijs/qiankun)的灵感来自并基于`single-spa`，
+[qiankun](https://github.com/umijs/qiankun)的灵感来自并基于`single-spa`，有以下几个特点。
 
 - **简单**: 任意 js 框架均可使用。微应用接入像使用接入一个 iframe 系统一样简单， 但实际不是 iframe 。 
 - **完备**: 几乎包含所有构建微前端系统时所需要的基本能力，如 样式隔离、 js 沙箱、 预加载等。 
@@ -1127,6 +1139,9 @@ $ yarn dev
 - 提供多种JS隔离方案
 
 ### qiankun使用
+
+> 下方示例代码存放在[@careteen/micro-fe/qiankun](https://github.com/careteenL/micro-fe/tree/master/qiankun)，感兴趣可以前往调试。
+
 
 下面实例采用`react`作为基座，并提供一个`vue`子应用和一个`react`子应用
 
@@ -1373,13 +1388,208 @@ $ yarn start
 
 #### 查看最终效果
 
-浏览器打开 http://localhost:3000/，点击`vue应用`
+在主应用中配置样式隔离
+```js
+start({
+  sandbox: {
+    // experimentalStyleIsolation:true
+    strictStyleIsolation: true,
+  },
+});
+```
+
+浏览器打开 http://localhost:3000/ 点击`vue应用`
 
 ![qiankun-result-vue](./assets/qiankun-result-vue.png)
 
-点击`react应用`
+点击`react应用`，可观察父子应用样式互不影响。
 
 ![qiankun-result-react](./assets/qiankun-result-react.png)
 
-###
+### qiankun原理
+
+通过使用`qiankun`可观察到其`API`和`single-spa`差不多。下面将大致了解下`qiankun`的实现原理。
+
+> 分析代码在[@careteen/qiankun](https://github.com/careteenL/qiankun)，里面有大量注释。
+
+#### registerMicroApps
+
+从入口注册方法`registerMicroApps`开始。
+
+![qiankun-registerMicroApps](./assets/qiankun-registerMicroApps.jpg)
+
+```ts
+
+export function registerMicroApps<T extends ObjectType>(
+  apps: Array<RegistrableApp<T>>, // 需要注册的应用
+  lifeCycles?: FrameworkLifeCycles<T>, // 对应的生命周期
+) {
+  // 过滤注册重复的应用
+  const unregisteredApps = apps.filter((app) => !microApps.some((registeredApp) => registeredApp.name === app.name));
+
+  microApps = [...microApps, ...unregisteredApps];
+
+  // 将需要注册的新应用，循环依次注册
+  unregisteredApps.forEach((app) => {
+    const { name, activeRule, loader = noop, props, ...appConfig } = app;
+
+    // 实际还是调用 single-spa 的注册函数
+    registerApplication({
+      name,
+      app: async () => {
+        loader(true); // 设置 loading
+        await frameworkStartedDefer.promise; // 等待 start 方法被调用
+
+        const { mount, ...otherMicroAppConfigs } = (
+          // 加载应用，获取生命周期钩子
+          await loadApp({ name, props, ...appConfig }, frameworkConfiguration, lifeCycles)
+        )();
+
+        // 调用 mount 
+        return {
+          mount: [async () => loader(true), ...toArray(mount), async () => loader(false)],
+          ...otherMicroAppConfigs,
+        };
+      },
+      activeWhen: activeRule,
+      customProps: props,
+    });
+  });
+}
+```
+
+实际还是调用`single-spa`的注册函数`registerApplication`，只不过多做了过滤注册重复的应用。
+
+#### start
+
+![qiankun-start](./assets/qiankun-start.png)
+
+```ts
+export function start(opts: FrameworkConfiguration = {}) {
+  // prefetch 是否支持预加载
+  // singular 是否支持单例模式
+  // sandbox 是否支持沙箱
+  frameworkConfiguration = { prefetch: true, singular: true, sandbox: true, ...opts };
+  const {
+    prefetch,
+    sandbox,
+    singular,
+    urlRerouteOnly = defaultUrlRerouteOnly,
+    ...importEntryOpts
+  } = frameworkConfiguration;
+
+  if (prefetch) { // 预加载策略
+    doPrefetchStrategy(microApps, prefetch, importEntryOpts);
+  }
+
+  // 开启沙箱
+  if (sandbox) {
+    // 如果不支持 Proxy 则降级到快照沙箱 loose 表示使用快照沙箱
+    if (!window.Proxy) {
+      console.warn('[qiankun] Miss window.Proxy, proxySandbox will degenerate into snapshotSandbox');
+      frameworkConfiguration.sandbox = typeof sandbox === 'object' ? { ...sandbox, loose: true } : { loose: true };
+      // Proxy 下若为非单例模式 则会报错
+      if (!singular) {
+        console.warn(
+          '[qiankun] Setting singular as false may cause unexpected behavior while your browser not support window.Proxy',
+        );
+      }
+    }
+  }
+
+  // 启动应用，最终实际调用 single spa 的 start 方法
+  startSingleSpa({ urlRerouteOnly });
+  started = true;
+
+  // 启动后，将 promise 状态改为成功态
+  frameworkStartedDefer.resolve();
+}
+```
+
+`qiankun`提供**预加载、单例模式、开启沙箱**配置。在开启沙箱时，会优先使用`Proxy`代理沙箱，如果浏览器不支持，则降级使用`Snapshot`快照沙箱。
+
+在使用代理沙箱时，如果浏览器不支持`Proxy`且开启了单例模式，则会报错，因为在快照沙箱下使用单例模式会存在问题。具体下面会提到
+
+
+#### prefetch
+
+```ts
+export function doPrefetchStrategy(
+  apps: AppMetadata[],
+  prefetchStrategy: PrefetchStrategy,
+  importEntryOpts?: ImportEntryOpts,
+) {
+  const appsName2Apps = (names: string[]): AppMetadata[] => apps.filter((app) => names.includes(app.name));
+
+  if (Array.isArray(prefetchStrategy)) {
+    // 加载第一个应用
+    prefetchAfterFirstMounted(appsName2Apps(prefetchStrategy as string[]), importEntryOpts);
+  }
+  // ...
+}
+
+function prefetchAfterFirstMounted(apps: AppMetadata[], opts?: ImportEntryOpts): void {
+  // 监听第一个应用的
+  window.addEventListener('single-spa:first-mount', function listener() {
+    // 过滤所有没加载的 app
+    const notLoadedApps = apps.filter((app) => getAppStatus(app.name) === NOT_LOADED);
+
+    if (process.env.NODE_ENV === 'development') {
+      const mountedApps = getMountedApps();
+      console.log(`[qiankun] prefetch starting after ${mountedApps} mounted...`, notLoadedApps);
+    }
+    // 没加载的 app 全部需要预加载
+    notLoadedApps.forEach(({ entry }) => prefetch(entry, opts));
+    // 移除监听的事件
+    window.removeEventListener('single-spa:first-mount', listener);
+  });
+}
+function prefetch(entry: Entry, opts?: ImportEntryOpts): void {
+  if (!navigator.onLine || isSlowNetwork) {
+    // Don't prefetch if in a slow network or offline
+    return;
+  }
+  // 使用 requestIdleCallback 在浏览器空闲时间进行预加载
+  requestIdleCallback(async () => {
+    // 使用 import-html-entry 进行加载资源
+    // 其内部实现 是通过 fetch 去加载资源
+    const { getExternalScripts, getExternalStyleSheets } = await importEntry(entry, opts);
+    requestIdleCallback(getExternalStyleSheets);
+    requestIdleCallback(getExternalScripts);
+  });
+}
+```
+
+监听第一个加载的应用：过滤所有没加载的 app，将其预加载。
+
+使用 `requestIdleCallback` 在浏览器空闲时间进行预加载；使用 `import-html-entry` 进行加载资源，其内部实现 是通过 `fetch` 去加载资源，取代`single-spa`采用的`system.js`模块规范加载资源。
+
+> `requestIdleCallback`在`react fiber 架构`中有使用到，感兴趣的可前往[浏览器任务调度策略和渲染流程](https://github.com/careteenL/react/tree/master/packages/fiber#%E6%B5%8F%E8%A7%88%E5%99%A8%E4%BB%BB%E5%8A%A1%E8%B0%83%E5%BA%A6%E7%AD%96%E7%95%A5%E5%92%8C%E6%B8%B2%E6%9F%93%E6%B5%81%E7%A8%8B)查看。
+
+#### loadApp
+
+当执行`start`方法后，会去执行`registerApplication`中的`loadApp`加载子应用。
+
+![qiankun-loadApp](./assets/qiankun-loadApp.png)
+
+其实现代码较多，可以前往[qiankun/loader.ts/loadApp](https://github.com/careteenL/qiankun/blob/master/src/loader.ts#L244)查看实现，有注释表明大概流程。总结下来主要做了如下几件事
+
+- 通过 `importEntry` 方法拉取子应用
+- 在拉取的模板外面包一层 `div` ,增加 `css` 样式隔离，提供`shadowdom` 、 `scopedCSS`两种方式
+- 将模板进行挂载
+- 创建 `js` 沙箱 ,获得沙箱开启和沙箱关闭方法
+- 合并出 `beforeUnmount` 、 `afterUnmount` 、 `afterMount` 、 `beforeMount` 、 `beforeLoad` 方法。增加 `qiankun` 标识
+- 依次调用 `beforeLoad` 方法
+- 在沙箱中执行脚本， 获取子应用的生命周期 `bootstrap` 、 `mount` 、 `unmount` `、update`
+- 格式化子应用的 `mount` 方法和 `unmount` 方法。
+  -  在`mount`执行前挂载沙箱、依次执行 `beforeMount` ，之后调用`mount`方法，将 全局通信方法传入。mount方法执行完毕后执行 `afterMount`
+  - `unmount`方法会优先执行 `beforeUnmount` 钩子，之后开始卸载
+- 增添一个 `update` 方法
+
+
+#### createSandboxContainer
+
+接下来是如何创建沙箱的实现
+
+![qiankun-createSandboxContainer](./assets/qiankun-createSandboxContainer.jpg)
 
