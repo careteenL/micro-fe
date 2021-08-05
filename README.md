@@ -1635,7 +1635,7 @@ window.name = '搜狐焦点'
 
 #### Snapshot Sandbox
 
-> [源码实现代码](https://github.com/careteenL/qiankun/blob/master/src/sandbox/snapshotSandbox.ts#L40
+> [源码实现代码](https://github.com/careteenL/qiankun/blob/master/src/sandbox/snapshotSandbox.ts#L40)
 
 ```ts
 function iter(obj: typeof window, callbackFn: (prop: any) => void) {
