@@ -37,11 +37,18 @@
   - 基于 single spa
   - 不用 systemjs，而用 fetch 去加载子应用
   - 提供多种样式隔离方案
-    - shadow dom
+    - shadow dom：真正意义上得隔离，主子应用获取不到对方的元素
+    - scope css：在最顶级元素上增加 [data-qiankun="slave-name"]属性
   - 提供多种js隔离方案
-    - 宽松沙箱
-    - proxy 沙箱
-    - 快照沙箱
+    - 宽松沙箱：在 proxy 基础上做了额外处理
+    - proxy 沙箱：使用 proxy 实现，新增属性放到 proxy 上，取属性先从 proxy 取，没有再从实际 window 取
+    - 快照沙箱：拍个照，循环复制，缺点就是在非单例模式下会存在数据污染问题
+  - 父子通信
+    - 基于发布订阅模式实现
+  - import-html-entry
+    - importHTML
+    - processTpl
+      - 大量正则对 html 做解析
 
 ## 资料
 
