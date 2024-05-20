@@ -275,7 +275,31 @@
 // console.log(/^(\w+\s?)++$/.test(str))
 
 // Case 2
-let str = '123456789011234567890212345678903123456789'
-// console.log(/^(\d+)*$/.test(str)) // 递归回溯，耗时 133s 谨慎放开注释
-// console.log(/^\d++$/.test(str)) // JavaScript 不支持占有型量词
-console.log(/^(?=(?<number>\d+))\k<number>$/.test(str))
+// let str = '123456789011234567890212345678903123456789'
+// // console.log(/^(\d+)*$/.test(str)) // 递归回溯，耗时 133s 谨慎放开注释
+// // console.log(/^\d++$/.test(str)) // JavaScript 不支持占有型量词
+// console.log(/^(?=(?<number>\d+))\k<number>$/.test(str))
+
+/**
+ * @desc /y 粘性修饰符
+ */
+// Case 1 全局匹配
+// let str = 'let valName = "value"'
+// let regexp = /\w+/g
+// console.log('1', regexp.exec(str), regexp.lastIndex) // let
+// console.log('2', regexp.exec(str), regexp.lastIndex) // valName
+
+// Case 2 修改 lastIndex，开始匹配位置
+// let str = 'let valName = "value"'
+// let regexp = /\w+/g
+// regexp.lastIndex = 3
+// console.log('1', regexp.exec(str), regexp.lastIndex) // valName
+
+// Case 2 /y 粘性修饰符
+// let str = 'let valName = "value"'
+// let regexp = /\w+/y
+// // regexp.lastIndex = 3 // 匹配不到
+// // console.log('1', regexp.exec(str), regexp.lastIndex) // null
+// regexp.lastIndex = 4 // 严格能匹配到
+// console.log('1', regexp.exec(str), regexp.lastIndex) // valName
+
