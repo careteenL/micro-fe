@@ -224,5 +224,58 @@
 
 // Case 4 查找完整标签
 // let regexp = /<style\b.*?>/g;
-let regexp = /<style(>|\s.*?>)/g;
-console.log( '<style> <styler> <style test="...">'.match(regexp) ); // <style>, <style test="...">
+// let regexp = /<style(>|\s.*?>)/g;
+// console.log( '<style> <styler> <style test="...">'.match(regexp) ); // <style>, <style test="...">
+
+/**
+ * @desc 前瞻断言 后瞻断言
+ */
+// // Case 1 肯定前瞻
+// let str = "1 turkey costs 30€";
+// console.log(str.match(/\d+(?=€)/)) // 30
+// console.log(str.match(/\d+(?=\s)(?=.*30)/)) // 2
+
+// Case 2 否定前瞻
+// let str = "2 turkeys cost 60€";
+// console.log(str.match(/\d+(?!€)/)) // 2
+
+// Case 3 肯定后瞻
+// let str = "1 turkey costs $30";
+// console.log(str.match(/(?:\$)(\d+)/)) // $30, 30
+// console.log(str.match(/(?<=\$)\d+/)) // 30
+
+// Case 4 否定后瞻
+// let str = "1 turkey costs $30";
+// console.log(str.match(/(?<!\$)\d+/))
+
+// Case 5 找到非负整数
+// let str = "0 12 -5 123 -182";
+// console.log(str.match(/(?<![\-\d])\d+/g))
+
+// Case 6 在指定标签后插入内容
+// let str = `
+// <html>
+//     <body style="height: 200px">
+//         ...
+//     </body>
+// </html>
+// `
+// console.log(str.replace(/(?<tag><body.*?>)/, '$<tag> <h1>Hello</h1>')) // 替换 tag 分组
+// console.log(str.replace(/(?<tag><body.*?>)(?!<\\body>)/, '$<tag> <h1>Hello</h1>')) // 否定前瞻断言 替换 tag 分组
+// console.log(str.replace(/(?<=body.*?>)/, '<h1>Hello</h1>')) // 后瞻断言 替换空字符
+
+/**
+ * @desc 灾难性回溯
+ * @link https://zh.javascript.info/regexp-catastrophic-backtracking
+ */
+// Case 1
+// let str = "An input string that takes a long time or even makes this regex hang!"
+// // console.log(/^(\w+\s?)*$/.test(str)) // 递归回溯，耗时 152s 谨慎放开注释
+// console.log(/^((?=(?<word>\w+))\k<word>\s?)*$/.test(str)) // 防止回溯 耗时 0.5s
+// console.log(/^(\w+\s?)++$/.test(str))
+
+// Case 2
+let str = '123456789011234567890212345678903123456789'
+// console.log(/^(\d+)*$/.test(str)) // 递归回溯，耗时 133s 谨慎放开注释
+// console.log(/^\d++$/.test(str)) // JavaScript 不支持占有型量词
+console.log(/^(?=(?<number>\d+))\k<number>$/.test(str))
